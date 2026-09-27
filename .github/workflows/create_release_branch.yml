@@ -1,0 +1,74 @@
+name: Create Release Branch
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "作成するReleaseブランチのバージョンを入力してください"
+                required: true
+                default: "1.0.0"
+
+jobs:
+    create_release_branch:
+        runs-on: ubuntu-latest
+        env:
+            INPUT_VERSION: ${{ github.event.inputs.version }}
+            RELEASE_BRANCH_NAME: "release/${{ github.event.inputs.version }}"
+            GITHUB_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
+
+        steps:
+            # -------------------------
+            # チェックアウト
+            # -------------------------
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            # -------------------------
+            # リリースブランチの存在確認
+            # -------------------------
+            - name: Check Release Branch
+              shell: bash
+              run: |
+                  if git ls-remote --exit-code --heads origin "refs/heads/release/*" > /dev/null 2>&1; then
+                      echo "IS_RELEASE=true" > "$GITHUB_ENV"
+                  else
+                      echo "IS_RELEASE=false" > "$GITHUB_ENV"
+                  fi
+
+            # -------------------------
+            # バージョンファイルの更新
+            # -------------------------
+            - name: Update Version File
+              if: env.IS_RELEASE == 'false'
+              run: |
+                  echo "${INPUT_VERSION}" > .version
+
+            # -------------------------
+            # Gitの設定
+            # -------------------------
+            - name: Setup Git
+              if: env.IS_RELEASE == 'false'
+              run: |
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+            # -------------------------
+            # リリースブランチの作成
+            # -------------------------
+            - name: Create Release Branch
+              if: env.IS_RELEASE == 'false'
+              run: |
+                  git checkout -b "${RELEASE_BRANCH_NAME}"
+                  git push origin "${RELEASE_BRANCH_NAME}"
+
+            # -------------------------
+            # バージョンファイルのコミット
+            # -------------------------
+            - name: Commit Version File
+              if: env.IS_RELEASE == 'false'
+              run: |
+                  git add .version
+                  git commit -m "Update version to ${INPUT_VERSION}"
+                  git push origin "${RELEASE_BRANCH_NAME}"
